@@ -30,11 +30,13 @@
 !NOTICE
 !SECURITY.md
 
-# 3. Allow docs and templates
+# 3. Allow docs, templates, and skill
 !docs/
 !docs/**
 !templates/
 !templates/**
+!perplexity-mcp-skill/
+!perplexity-mcp-skill/**
 !perplexity.config.example.json
 
 # 4. Allow packages (production source)
