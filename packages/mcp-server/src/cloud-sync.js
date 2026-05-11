@@ -150,7 +150,7 @@ export async function syncCloudHistory(opts = {}) {
  * isn't a cloud entry.
  *
  * Tries the impit fast path first (no browser launch). If that misses,
- * lazy-acquires the daemon's client (or constructs one) and falls back
+ * lazy-acquires the active MCP client (or constructs one) and falls back
  * to the browser path. The first impit miss in a hydrate run sticks for
  * any subsequent steps in this same call (there's only one fetch, so
  * this is a no-op in practice but keeps the semantics consistent with

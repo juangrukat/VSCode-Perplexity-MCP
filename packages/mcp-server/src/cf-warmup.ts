@@ -18,8 +18,8 @@
 //    arg set is sufficient for CF challenge resolution. The flags removed in
 //    the 2026-04-27 public-hardening audit (--disable-web-security,
 //    --disable-features=IsolateOrigins, etc.) are NOT re-introduced here.
-//  - Error categories: (a) browser-resolution failure (no Chrome / Edge /
-//    Chromium / bundled), (b) patchright import failure, (c) launch /
+//  - Error categories: (a) browser-resolution failure (no Chrome), (b)
+//    patchright import failure, (c) launch /
 //    navigation failure. All map to ok=false with a descriptive `error`.
 //    A successful navigation that does not yield cf_clearance returns ok=true
 //    with hasCfClearance=false — useful signal for the caller (browser is
@@ -133,9 +133,7 @@ export async function warmCloudflare(opts: WarmCloudflareOptions = {}): Promise<
       // strip Playwright's default `--enable-automation` flag since CF
       // fingerprints it.
       ...(probe ? { executablePath: probe.path } : {}),
-      ...(probe && (probe.channel === "chrome" || probe.channel === "msedge" || probe.channel === "chromium")
-        ? { channel: probe.channel }
-        : {}),
+      ...(probe ? { channel: probe.channel } : {}),
       ignoreDefaultArgs: ["--enable-automation"],
     });
 

@@ -498,15 +498,13 @@ async function tierBrowser(cookies: PlaywrightCookie[], log: (l: string) => void
   }
 
   const probe = findBrowser();
-  const label = probe
-    ? `${probe.channel}${probe.path.toLowerCase().includes("brave") ? " (brave)" : ""}`
-    : "bundled";
+  const label = probe ? probe.channel : "unknown";
   log(`browser: launching headless ${label}`);
   const browser = await chromium.launch({
     headless: true,
     args: STEALTH_ARGS,
     ...(probe ? { executablePath: probe.path } : {}),
-    ...(probe && ["chrome", "msedge", "chromium"].includes(probe.channel) ? { channel: probe.channel as any } : {}),
+    ...(probe ? { channel: probe.channel as any } : {}),
     ignoreDefaultArgs: ["--enable-automation"],
   });
 

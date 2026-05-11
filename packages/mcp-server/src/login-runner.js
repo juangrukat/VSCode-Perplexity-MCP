@@ -74,7 +74,7 @@ async function main() {
   const browser = await chromium.launch({
     headless: localOrigin,
     ...(executablePath ? { executablePath } : {}),
-    ...(channel && ["chrome", "msedge", "chromium"].includes(channel) ? { channel } : {}),
+    ...(channel === "chrome" ? { channel } : {}),
     args: localOrigin ? [] : ["--start-minimized"],
   });
   const ctx = await browser.newContext({ ignoreHTTPSErrors: true });

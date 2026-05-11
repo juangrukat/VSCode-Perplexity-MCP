@@ -25,37 +25,26 @@
 !tsconfig.base.json
 !vitest.config.ts
 !README.md
-!CHANGELOG.md
 !LICENSE
 !LICENSE.txt
 !NOTICE
 !SECURITY.md
 
-# 3. Allow GitHub config
-!.github/
-!.github/**
-
-# 4. Allow build scripts
-!scripts/
-!scripts/**
-
-# 5. Allow root media assets
-!mcp-tool-icons/
-!mcp-tool-icons/**
-
-# 5b. Allow specific docs assets (e.g. README preview images)
+# 3. Allow docs and templates
 !docs/
-!docs/preview_compressed.webp
+!docs/**
+!templates/
+!templates/**
+!perplexity.config.example.json
 
-# 6. Allow packages (production source)
+# 4. Allow packages (production source)
 !packages/
-
-!packages/shared/
-!packages/shared/**
 
 !packages/mcp-server/
 !packages/mcp-server/src/
 !packages/mcp-server/src/**
+!packages/mcp-server/scripts/
+!packages/mcp-server/scripts/**
 !packages/mcp-server/test/
 !packages/mcp-server/test/**
 !packages/mcp-server/package.json
@@ -63,13 +52,7 @@
 !packages/mcp-server/tsup.config.ts
 !packages/mcp-server/README.md
 
-!packages/webview/
-!packages/webview/**
-
-!packages/extension/
-!packages/extension/**
-
-# 6. Re-ignore private/generated files inside allowed dirs
+# 5. Re-ignore private/generated files inside allowed dirs
 **/node_modules/
 **/dist/
 *.vsix
@@ -78,5 +61,3 @@
 *.debug.json
 **/PLAN.md
 .env*
-packages/extension/media/webview/
-packages/extension/dist/node_modules/

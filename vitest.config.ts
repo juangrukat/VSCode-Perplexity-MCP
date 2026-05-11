@@ -13,10 +13,7 @@ const skipBrowserBackedTests =
 export default defineConfig({
   test: {
     include: [
-      "packages/extension/tests/**/*.test.ts",
-      "packages/webview/tests/**/*.test.{ts,tsx}",
       "packages/mcp-server/test/**/*.test.{js,ts}",
-      "packages/shared/tests/**/*.test.ts",
     ],
     exclude: [
       "**/node_modules/**",
@@ -29,7 +26,6 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
       include: [
-        "packages/extension/src/**/*.ts",
         "packages/mcp-server/src/**/*.{js,ts}",
       ],
       exclude: [

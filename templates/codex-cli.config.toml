@@ -1,0 +1,6 @@
+[mcp_servers.Perplexity]
+command = "npx"
+args = ["-y", "perplexity-user-mcp"]
+
+[mcp_servers.Perplexity.env]
+PERPLEXITY_CONFIG_DIR = "~/.perplexity-mcp"

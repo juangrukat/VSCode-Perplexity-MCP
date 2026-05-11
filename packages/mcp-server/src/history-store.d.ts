@@ -1,4 +1,4 @@
-import type { HistoryEntryDetail, HistoryItem } from "@perplexity-user-mcp/shared";
+import type { HistoryEntryDetail, HistoryItem } from "./types.js";
 
 export interface HistoryStoreEntryInput extends Partial<HistoryItem> {
   tool: string;

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { PerplexityClient } from "./client.js";
-import { ensureDaemon, startDaemon } from "./daemon/launcher.js";
 import { registerTools } from "./tools.js";
 import { registerPrompts } from "./prompts.js";
 import { registerResources } from "./resources.js";
@@ -55,7 +55,7 @@ export async function runVaultPreflight(
   } catch (err) {
     const summary = err instanceof Error ? err.message.split("\n")[0] : String(err);
     stderr.write(`[perplexity-mcp] WARN vault-locked: ${summary}\n`);
-    stderr.write(`[perplexity-mcp]   Setup docs: docs/codex-cli-setup.md\n`);
+    stderr.write(`[perplexity-mcp]   Setup docs: README.md and docs/perplexity-config.md\n`);
     stderr.write(`[perplexity-mcp]   Tools that don't need cookies (perplexity_doctor, perplexity_search anonymous mode) will still work.\n`);
     stderr.write(`[perplexity-mcp]   Tools that need cookies (perplexity_research, perplexity_compute, perplexity_reason) will fail until the vault is unsealed.\n`);
   }
@@ -191,7 +191,16 @@ export async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isDirectRun(metaUrl: string, argvPath: string | undefined): boolean {
+  if (!argvPath) return false;
+  try {
+    return realpathSync(fileURLToPath(metaUrl)) === realpathSync(argvPath);
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectRun(import.meta.url, process.argv[1])) {
   runEntrypoint().catch(async (error) => {
     console.error("[perplexity-mcp] Fatal error:", error);
     await shutdownClientWithTimeout(client);
@@ -220,8 +229,6 @@ async function runEntrypoint() {
 
 // Re-export public API for library consumers
 export { PerplexityClient } from "./client.js";
-export { ensureDaemon, startDaemon } from "./daemon/launcher.js";
-export { attachToDaemon } from "./daemon/attach.js";
 export { registerTools } from "./tools.js";
 export { registerPrompts } from "./prompts.js";
 export { registerResources } from "./resources.js";
@@ -251,7 +258,7 @@ export {
 export { syncCloudHistory, hydrateCloudHistoryEntry } from "./cloud-sync.js";
 export { exportThread } from "./export.js";
 export type { HistoryEntry } from "./format.js";
-export type { HistoryItem } from "@perplexity-user-mcp/shared";
+export type { ExternalViewer, HistoryEntryDetail, HistoryItem } from "./types.js";
 export { loadToolConfig, getEnabledTools, saveToolConfig, watchToolConfig } from "./tool-config.js";
 export type { ToolProfile } from "./tool-config.js";
 export { findBrowser } from "./config.js";

@@ -9,6 +9,7 @@ import { resolveBrowserExecutable } from "./config.js";
 import { getProfilePaths, getActiveName, recordLoginSuccess } from "./profiles.js";
 import { redact } from "./redact.js";
 import { collectSessionMetadata } from "./session-metadata.js";
+import { clearStaleSingletonLocks } from "./fs-utils.js";
 
 const ORIGIN = process.env.PERPLEXITY_ORIGIN || "https://www.perplexity.ai";
 // Perplexity's login flow lives at /account (the `/login` path doesn't exist
@@ -30,6 +31,7 @@ function emit(obj) { process.stdout.write(JSON.stringify(obj) + "\n"); }
 
 async function main() {
   const PROFILE = resolveProfile();
+  const paths = getProfilePaths(PROFILE);
 
   let executablePath;
   let channel;
@@ -42,16 +44,27 @@ async function main() {
     }
   }
 
-  const browser = await chromium.launch({
-    headless: isTest,
-    ...(executablePath ? { executablePath } : {}),
-    ...(channel && ["chrome", "msedge", "chromium"].includes(channel) ? { channel } : {}),
-  });  // isTest = headless in CI; humans see headed.
-  const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
+  let browser = null;
+  let ctx;
+  if (isTest) {
+    browser = await chromium.launch({ headless: true });
+    ctx = await browser.newContext({ ignoreHTTPSErrors: true });
+  } else {
+    if (!existsSync(paths.browserData)) mkdirSync(paths.browserData, { recursive: true });
+    clearStaleSingletonLocks(paths.browserData);
+    ctx = await chromium.launchPersistentContext(paths.browserData, {
+      headless: false,
+      ...(executablePath ? { executablePath } : {}),
+      ...(channel === "chrome" ? { channel } : {}),
+      ignoreHTTPSErrors: true,
+    });
+    browser = ctx.browser();
+  }
   const page = await ctx.newPage();
 
   let cfClosed = false;
-  browser.on("disconnected", () => { cfClosed = true; });
+  browser?.on?.("disconnected", () => { cfClosed = true; });
+  ctx.on?.("close", () => { cfClosed = true; });
 
   // Navigate to the login page so the page has a same-origin context for
   // subsequent credentialed fetch() calls. Going to ORIGIN's root path can
@@ -73,7 +86,7 @@ async function main() {
   if (Date.now() - cfStart >= CF_TIMEOUT_MS) {
     const title = await page.title().catch(() => "");
     if (/just a moment/i.test(title)) {
-      await browser.close().catch(() => {});
+      await ctx.close().catch(() => {});
       emit({ ok: false, reason: "cf_blocked" });
       process.exit(3);
     }
@@ -93,7 +106,7 @@ async function main() {
 
   // Test hook: force a browser close to exercise the cancelled path.
   if (process.env.PERPLEXITY_TEST_BROWSER_CLOSE_AFTER_MS) {
-    setTimeout(() => browser.close().catch(() => {}), Number(process.env.PERPLEXITY_TEST_BROWSER_CLOSE_AFTER_MS));
+    setTimeout(() => ctx.close().catch(() => {}), Number(process.env.PERPLEXITY_TEST_BROWSER_CLOSE_AFTER_MS));
   }
 
   const started = Date.now();
@@ -109,7 +122,7 @@ async function main() {
     if (sessionCookie) break;
   }
   if (!sessionCookie) {
-    await browser.close().catch(() => {});
+    await ctx.close().catch(() => {});
     emit({ ok: false, reason: "timeout" });
     process.exit(2);
   }
@@ -122,7 +135,6 @@ async function main() {
   if (metadata.sessionData?.user?.email) await vault.set(PROFILE, "email", metadata.sessionData.user.email);
   if (metadata.sessionData?.user?.id) await vault.set(PROFILE, "userId", metadata.sessionData.user.id);
 
-  const paths = getProfilePaths(PROFILE);
   if (!existsSync(paths.dir)) mkdirSync(paths.dir, { recursive: true });
   writeFileSync(paths.modelsCache, JSON.stringify(metadata.cache, null, 2));
 
@@ -130,7 +142,7 @@ async function main() {
 
   writeFileSync(paths.reinit, String(Date.now()));
 
-  await browser.close().catch(() => {});
+  await ctx.close().catch(() => {});
   emit({ ok: true, tier: metadata.tier, modelCount: Object.keys(metadata.models?.models ?? {}).length });
   process.exit(0);
 }

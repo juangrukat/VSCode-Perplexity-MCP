@@ -12,9 +12,7 @@
     "sourceMap": true
   },
   "references": [
-    { "path": "packages/shared" },
-    { "path": "packages/mcp-server" },
-    { "path": "packages/extension" }
+    { "path": "packages/mcp-server" }
   ],
   "include": [],
   "exclude": ["node_modules", "dist"]

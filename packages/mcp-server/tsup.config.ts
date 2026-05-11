@@ -24,17 +24,6 @@ export default defineConfig({
     "tty-prompt": "src/tty-prompt.js",
     doctor: "src/doctor.js",
     "doctor-report": "src/doctor-report.js",
-    "daemon/index": "src/daemon/index.ts",
-    "daemon/attach": "src/daemon/attach.ts",
-    "daemon/audit": "src/daemon/audit.ts",
-    "daemon/client-http": "src/daemon/client-http.ts",
-    "daemon/install-tunnel": "src/daemon/install-tunnel.ts",
-    "daemon/launcher": "src/daemon/launcher.ts",
-    "daemon/lockfile": "src/daemon/lockfile.ts",
-    "daemon/server": "src/daemon/server.ts",
-    "daemon/token": "src/daemon/token.ts",
-    "daemon/tunnel": "src/daemon/tunnel.ts",
-    "daemon/tunnel-providers/index": "src/daemon/tunnel-providers/index.ts",
     "checks/runtime": "src/checks/runtime.js",
     "checks/config": "src/checks/config.js",
     "checks/profiles": "src/checks/profiles.js",
@@ -42,7 +31,6 @@ export default defineConfig({
     "checks/browser": "src/checks/browser.js",
     "checks/native-deps": "src/checks/native-deps.js",
     "checks/network": "src/checks/network.js",
-    "checks/ide": "src/checks/ide.js",
     "checks/mcp": "src/checks/mcp.js",
     "checks/probe": "src/checks/probe.js",
   },
@@ -69,21 +57,9 @@ export default defineConfig({
     // throws "Dynamic require of fs is not supported". Load it from
     // node_modules instead so Node's native CJS interop handles it.
     "gray-matter",
-    // express and its CJS transitive deps (body-parser, depd, ...) use
-    // top-level `require("path")` / `require("fs")`. Same __require shim
-    // failure as gray-matter above — must resolve from node_modules at runtime.
-    "express",
-    // @ngrok/ngrok is a NAPI native-addon binding; can't be bundled into ESM.
-    "@ngrok/ngrok",
-    // helmet is CJS with setter-based exports that tsup's __require shim
-    // handles poorly under ESM; external is the standard pattern.
-    "helmet",
   ],
-  // Shebang is NOT emitted into source files — it tripped vitest/esbuild
-  // during test imports of cli.js. npm's `bin` linker wraps the entry with
-  // its own node invocation on install, so the shebang isn't required for
-  // `npx perplexity-user-mcp` to work. If direct execution (`./dist/cli.mjs`)
-  // ever needs to work without npm, re-add via a post-build script that
-  // targets cli.mjs specifically.
+  // The CLI shebang is added after bundling by scripts/add-cli-shebang.mjs.
+  // Keeping it out of src/cli.js avoids test/import parser edge cases while
+  // still making npm's Unix bin symlink executable.
   outExtension: () => ({ js: ".mjs" }),
 });

@@ -1,0 +1,7 @@
+{
+  "configDir": "~/.perplexity-mcp",
+  "profile": "default",
+  "browserPath": "",
+  "vaultPassphraseEnv": "PERPLEXITY_VAULT_PASSPHRASE",
+  "loginMode": "manual"
+}

@@ -29,10 +29,10 @@ export function watchReinit(profileName, callback, opts = {}) {
  * Watch the `<configDir>/active` pointer file for profile switches.
  *
  * The per-profile `watchReinit` is bound to a single profile's `.reinit` file
- * captured at daemon startup; if the user switches the active profile, that
+ * captured at server startup; if the user switches the active profile, that
  * watcher will never see anything (the new profile's `.reinit` is in a
  * different directory). This second watcher fires whenever `setActive()`
- * rewrites the active-pointer atomically, letting the daemon call
+ * rewrites the active-pointer atomically, letting the server call
  * `client.reinit()` on profile switches AND rebind its per-profile watcher
  * to the newly-active profile so subsequent login events propagate.
  */

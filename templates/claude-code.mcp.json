@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "Perplexity": {
+      "command": "npx",
+      "args": ["-y", "perplexity-user-mcp"],
+      "env": {
+        "PERPLEXITY_CONFIG_DIR": "~/.perplexity-mcp"
+      }
+    }
+  }
+}

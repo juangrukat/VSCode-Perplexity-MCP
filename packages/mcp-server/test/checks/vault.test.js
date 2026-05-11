@@ -20,6 +20,7 @@ beforeEach(() => {
 
 describe("checks/vault", () => {
   it("passes when keychain provides a key", async () => {
+    delete process.env.PERPLEXITY_DISABLE_KEYCHAIN;
     vi.doMock("keytar", () => ({
       default: { getPassword: vi.fn(async () => "a".repeat(64)), setPassword: vi.fn() },
     }));
@@ -40,6 +41,7 @@ describe("checks/vault", () => {
   });
 
   it("warns when env var is used on a platform with keychain available", async () => {
+    delete process.env.PERPLEXITY_DISABLE_KEYCHAIN;
     vi.doMock("keytar", () => ({
       default: { getPassword: vi.fn(async () => "b".repeat(64)), setPassword: vi.fn() },
     }));
@@ -53,10 +55,12 @@ describe("checks/vault", () => {
   it("warns on vault.json plaintext opt-out", async () => {
     mkdirSync(join(dir, "profiles", "default"), { recursive: true });
     writeFileSync(join(dir, "profiles", "default", "vault.json"), "{}");
+    vi.doMock("keytar", () => { throw new Error("no keychain"); });
     const checks = await runVaultCheck({ configDir: dir, profile: "default" });
     const check = checks.find((c) => c.name === "encryption");
     expect(check.status).toBe("warn");
     expect(check.message).toMatch(/plaintext/i);
+    vi.doUnmock("keytar");
   });
 
   it("fails when nothing works and vault.enc exists", async () => {

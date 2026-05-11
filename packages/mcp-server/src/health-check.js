@@ -23,17 +23,14 @@ function resolveProfile() {
 
 /**
  * Launch a browser suitable for the health check. Respects
- * PERPLEXITY_BROWSER_CHANNEL / PERPLEXITY_BROWSER_PATH overrides from the
- * extension's AuthManager.
+ * PERPLEXITY_BROWSER_PATH overrides.
  */
 async function launchHealthBrowser() {
   const probe = findBrowser();
   return chromium.launch({
     headless: true,
     ...(probe ? { executablePath: probe.path } : {}),
-    ...(probe && ["chrome", "msedge", "chromium"].includes(probe.channel)
-      ? { channel: probe.channel }
-      : {}),
+    ...(probe ? { channel: probe.channel } : {}),
   });
 }
 

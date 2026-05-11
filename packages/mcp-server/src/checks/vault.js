@@ -4,6 +4,9 @@ import { join } from "node:path";
 const CATEGORY = "vault";
 
 async function tryKeychain() {
+  if (process.env.PERPLEXITY_DISABLE_KEYCHAIN === "1") {
+    return { available: false, hasKey: false };
+  }
   try {
     const mod = await import("keytar");
     const keytar = mod.default ?? mod;

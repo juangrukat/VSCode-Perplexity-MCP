@@ -73,7 +73,7 @@ describe("runVaultPreflight — locked vault (Codex CLI scenario)", () => {
     await expect(runVaultPreflight(sink)).resolves.toBeUndefined();
     const out = sink.chunks.join("");
     expect(out).toMatch(/^\[perplexity-mcp\] WARN vault-locked: Vault locked/m);
-    expect(out).toMatch(/Setup docs: docs\/codex-cli-setup\.md/);
+    expect(out).toMatch(/Setup docs: README\.md and docs\/perplexity-config\.md/);
     expect(out).toMatch(/perplexity_doctor.*will still work/);
     expect(out).toMatch(/perplexity_research.*perplexity_compute.*perplexity_reason.*will fail/);
   });

@@ -6,12 +6,10 @@ const CATEGORY = "browser";
  * Read the Chrome-family browser's version string without launching the
  * browser GUI.
  *
- * Why this is non-trivial: on Windows, `chrome.exe --version` invoked from a
- * non-console parent (the VS Code extension host) forks the browser process —
- * the original exits with code 0 and empty stdout (which is why the doctor
- * report's `chrome-family` message was blank), and the forked children stay
- * alive as visible Chrome windows. Every `runDoctor()` call (Run, Deep check,
- * Capture diagnostics, Export) was therefore spawning a permanent visible
+ * Why this is non-trivial: on Windows, `chrome.exe --version` can fork the
+ * browser process from non-console parents. The original exits with code 0
+ * and empty stdout, and the forked children can stay alive as visible Chrome
+ * windows. This check avoids leaving those windows behind.
  * window.
  *
  * Fix: on Windows, query the PE header's ProductVersion via PowerShell's
@@ -75,8 +73,8 @@ export async function run(opts = {}) {
       category: CATEGORY,
       name: "chrome-family",
       status: "fail",
-      message: "No Chrome / Edge / Chromium binary found on PATH or in standard locations.",
-      hint: "Run `npx perplexity-user-mcp install-browser` (Phase 4) or install Chrome/Edge manually.",
+      message: "Google Chrome was not found on PATH or in standard locations.",
+      hint: "Install Google Chrome, or set PERPLEXITY_BROWSER_PATH to the Chrome executable.",
     });
     return results;
   }

@@ -1,15 +1,22 @@
-// Shebang is added by tsup banner for the built dist/cli.mjs so the bin entry
-// works as a CLI. Kept out of source so vitest/esbuild can parse this file
-// during tests.
+// Shebang is added after bundling for dist/cli.mjs so the npm bin entry works
+// as a CLI. Kept out of source so vitest/esbuild can parse this file in tests.
 
 import { execFile as execFileCallback } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const execFile = promisify(execFileCallback);
+
+function isDirectRun(metaUrl, argvPath) {
+  if (!argvPath) return false;
+  try {
+    return realpathSync(fileURLToPath(metaUrl)) === realpathSync(argvPath);
+  } catch {
+    return false;
+  }
+}
 
 export function parseArgs(argv) {
   if (argv.length === 0) return { command: "server", flags: {} };
@@ -65,12 +72,6 @@ const KNOWN_COMMANDS = new Set([
   "install-speed-boost", "uninstall-speed-boost", "speed-boost-status",
   "add-account", "switch-account", "list-accounts",
   "export", "open", "rebuild-history-index", "sync-cloud",
-  "daemon:help", "daemon:start", "daemon:stop", "daemon:status", "daemon:attach",
-  "daemon:rotate-token", "daemon:install-tunnel", "daemon:enable-tunnel", "daemon:disable-tunnel",
-  "daemon:list-providers", "daemon:set-provider",
-  "daemon:set-ngrok-authtoken", "daemon:set-ngrok-domain", "daemon:clear-ngrok",
-  "daemon:cf-named-login", "daemon:cf-named-list",
-  "daemon:cf-named-create", "daemon:cf-named-bind",
 ]);
 
 function normalizeExportFormat(value) {
@@ -93,24 +94,26 @@ function normalizeExportFormat(value) {
 async function probeVaultState({ profile } = {}) {
   let keychainAvailable = false;
   let keychainHasKey = false;
-  try {
-    const mod = await import("keytar");
-    const keytar = mod.default ?? mod;
-    if (keytar && typeof keytar.getPassword === "function") {
-      keychainAvailable = true;
-      try {
-        const hex = await keytar.getPassword("perplexity-user-mcp", "vault-master-key");
-        keychainHasKey = !!hex;
-      } catch {
-        // getPassword can throw on broken credstore backends (e.g. headless
-        // Linux without libsecret). The binding loaded but isn't usable —
-        // treat that as "available but no key", same posture as a fresh
-        // box. vault.js falls back to env var when keychain returns null.
-        keychainHasKey = false;
+  if (process.env.PERPLEXITY_DISABLE_KEYCHAIN !== "1") {
+    try {
+      const mod = await import("keytar");
+      const keytar = mod.default ?? mod;
+      if (keytar && typeof keytar.getPassword === "function") {
+        keychainAvailable = true;
+        try {
+          const hex = await keytar.getPassword("perplexity-user-mcp", "vault-master-key");
+          keychainHasKey = !!hex;
+        } catch {
+          // getPassword can throw on broken credstore backends (e.g. headless
+          // Linux without libsecret). The binding loaded but isn't usable —
+          // treat that as "available but no key", same posture as a fresh
+          // box. vault.js falls back to env var when keychain returns null.
+          keychainHasKey = false;
+        }
       }
+    } catch {
+      keychainAvailable = false;
     }
-  } catch {
-    keychainAvailable = false;
   }
   const envPassphraseSet = !!process.env.PERPLEXITY_VAULT_PASSPHRASE;
   const hasTty = process.stdin?.isTTY === true && process.env.PERPLEXITY_MCP_STDIO !== "1";
@@ -215,7 +218,7 @@ function buildPersistenceSnippets(passphrase) {
   // 1. MCP client env block (preferred — scoped per client).
   snippets.push({
     title: "MCP client env block (preferred — scoped to one client only)",
-    detail: "Edit your MCP client's config (Cursor: ~/.cursor/mcp.json, Claude Desktop: claude_desktop_config.json, Codex CLI: ~/.codex/config.toml, etc.). Add an `env` field next to `command`/`args`:",
+    detail: "Edit your Claude Code or Codex CLI MCP config and add an `env` field next to `command`/`args`:",
     code: `{
   "mcpServers": {
     "Perplexity": {
@@ -265,7 +268,7 @@ function buildPersistenceSnippets(passphrase) {
       code: `echo 'export PERPLEXITY_VAULT_PASSPHRASE='\\''${passphrase}'\\''' >> ~/.zshrc`,
     });
     snippets.push({
-      title: "Linux — systemd unit (for daemon deployments)",
+      title: "Linux — systemd unit",
       detail: "If you run perplexity-user-mcp as a systemd service, add to the [Service] block:",
       code: `Environment=PERPLEXITY_VAULT_PASSPHRASE=${passphrase}`,
     });
@@ -376,6 +379,13 @@ async function openTarget(target) {
 
 export async function routeCommand(parsed) {
   const { command, flags } = parsed;
+  if (command.startsWith("daemon:")) {
+    return {
+      code: 1,
+      stdout: "",
+      stderr: "Daemon and tunnel commands were removed. Use the default stdio server command for Claude Code or Codex CLI.\n",
+    };
+  }
   if (!KNOWN_COMMANDS.has(command)) {
     return { code: 1, stdout: "", stderr: `Unknown command: ${command}\nRun --help for usage.` };
   }
@@ -401,370 +411,6 @@ export async function routeCommand(parsed) {
     return { code: 0, stdout: "", stderr: "" };
   }
   /* v8 ignore stop */
-
-  if (command === "daemon:help") {
-    return { code: 0, stdout: DAEMON_HELP_TEXT, stderr: "" };
-  }
-
-  if (command === "daemon:start") {
-    const port = parseOptionalPort(flags.port);
-    if (flags.port !== undefined && port === null) {
-      return { code: 1, stdout: "", stderr: "daemon start requires --port to be a positive integer.\n" };
-    }
-    const { startDaemon } = await import("./daemon/launcher.js");
-    const daemon = await startDaemon({
-      configDir: process.env.PERPLEXITY_CONFIG_DIR,
-      port: port ?? undefined,
-      tunnel: !!flags.tunnel,
-    });
-    if (daemon.attached) {
-      const body = flags.json
-        ? JSON.stringify({ ok: true, attached: true, ...serializeDaemonConnection(daemon) })
-        : `Attached to daemon pid=${daemon.pid} port=${daemon.port}`;
-      return { code: 0, stdout: body + "\n", stderr: "" };
-    }
-
-    await daemon.closed;
-    return { code: 0, stdout: "", stderr: "" };
-  }
-
-  if (command === "daemon:status") {
-    const { getDaemonStatus } = await import("./daemon/launcher.js");
-    const status = await getDaemonStatus({
-      configDir: process.env.PERPLEXITY_CONFIG_DIR,
-      reclaimStale: true,
-    });
-    const body = flags.json
-      ? JSON.stringify(serializeDaemonStatus(status))
-      : formatDaemonStatus(status);
-    return { code: 0, stdout: body + "\n", stderr: "" };
-  }
-
-  if (command === "daemon:stop") {
-    const { stopDaemon } = await import("./daemon/launcher.js");
-    const result = await stopDaemon({ configDir: process.env.PERPLEXITY_CONFIG_DIR });
-    const body = flags.json
-      ? JSON.stringify({ ok: true, ...result })
-      : result.stopped
-        ? `Stopped daemon pid=${result.pid ?? "unknown"}.`
-        : "Daemon is not running.";
-    return { code: 0, stdout: body + "\n", stderr: "" };
-  }
-
-  if (command === "daemon:rotate-token") {
-    try {
-      const { rotateDaemonToken } = await import("./daemon/launcher.js");
-      const daemon = await rotateDaemonToken({ configDir: process.env.PERPLEXITY_CONFIG_DIR });
-      const body = flags.json
-        ? JSON.stringify({ ok: true, ...serializeDaemonConnection(daemon) })
-        : `Rotated daemon token for pid=${daemon.pid} port=${daemon.port}.`;
-      return { code: 0, stdout: body + "\n", stderr: "" };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { code: 1, stdout: "", stderr: message + "\n" };
-    }
-  }
-
-  if (command === "daemon:attach") {
-    // 8.3.2: PERPLEXITY_NO_DAEMON=1 opt-out. Must short-circuit BEFORE importing
-    // the daemon layer — the whole point is air-gapped / single-client users
-    // keep the daemon code cold. Warning goes to stderr only (stdout is the
-    // MCP JSON-RPC channel; any byte on stdout corrupts the protocol).
-    const noDaemonRaw = process.env.PERPLEXITY_NO_DAEMON;
-    if (typeof noDaemonRaw === "string" && /^(1|true)$/i.test(noDaemonRaw.trim())) {
-      process.stderr.write(
-        "[perplexity-mcp] PERPLEXITY_NO_DAEMON=1 set; running in-process stdio (daemon bypass)\n",
-      );
-      const mod = await import("./index.js");
-      await mod.main();
-      return { code: 0, stdout: "", stderr: "" };
-    }
-    const { attachToDaemon } = await import("./daemon/attach.js");
-    const ensureTimeoutRaw = flags["ensure-timeout-ms"];
-    const ensureTimeoutMs =
-      typeof ensureTimeoutRaw === "string" && /^\d+$/.test(ensureTimeoutRaw)
-        ? Number(ensureTimeoutRaw)
-        : undefined;
-    try {
-      await attachToDaemon({
-        configDir: process.env.PERPLEXITY_CONFIG_DIR,
-        clientId: "daemon-attach-cli",
-        fallbackStdio: !!flags["fallback-stdio"],
-        ensureTimeoutMs,
-      });
-    } catch (err) {
-      // Phase 2 / Task 2.4: mirror the launcher's DaemonAttachError contract.
-      // Stdout is the JSON-RPC framing channel for the attached client, so the
-      // bullet remediation must land on stderr only; the script entry below
-      // converts code:2 into process.exit(2).
-      if (err && err.code === "DAEMON_UNREACHABLE") {
-        let stderr = "Perplexity MCP: cannot reach the extension-managed daemon.\n";
-        const remediation = Array.isArray(err.remediation) ? err.remediation : [];
-        for (const line of remediation) {
-          stderr += "  • " + line + "\n";
-        }
-        if (err.cause && err.cause.message) {
-          stderr += "Underlying error: " + err.cause.message + "\n";
-        }
-        return { code: 2, stdout: "", stderr };
-      }
-      throw err;
-    }
-    return { code: 0, stdout: "", stderr: "" };
-  }
-
-  if (command === "daemon:install-tunnel") {
-    const { installCloudflared } = await import("./daemon/install-tunnel.js");
-    const result = await installCloudflared({ configDir: process.env.PERPLEXITY_CONFIG_DIR });
-    const body = flags.json
-      ? JSON.stringify({ ok: true, ...result })
-      : `Installed cloudflared ${result.version} to ${result.binaryPath}`;
-    return { code: 0, stdout: body + "\n", stderr: "" };
-  }
-
-  if (command === "daemon:enable-tunnel") {
-    try {
-      const { enableDaemonTunnel } = await import("./daemon/launcher.js");
-      const status = await enableDaemonTunnel({ configDir: process.env.PERPLEXITY_CONFIG_DIR });
-      const body = flags.json
-        ? JSON.stringify({ ok: true, ...serializeDaemonStatus(status) })
-        : status.health?.tunnel?.url
-          ? `Tunnel enabled: ${status.health.tunnel.url}`
-          : "Tunnel enable requested.";
-      return { code: 0, stdout: body + "\n", stderr: "" };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { code: 1, stdout: "", stderr: message + "\n" };
-    }
-  }
-
-  if (command === "daemon:disable-tunnel") {
-    try {
-      const { disableDaemonTunnel } = await import("./daemon/launcher.js");
-      const status = await disableDaemonTunnel({ configDir: process.env.PERPLEXITY_CONFIG_DIR });
-      const body = flags.json
-        ? JSON.stringify({ ok: true, ...serializeDaemonStatus(status) })
-        : "Tunnel disabled.";
-      return { code: 0, stdout: body + "\n", stderr: "" };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { code: 1, stdout: "", stderr: message + "\n" };
-    }
-  }
-
-  if (command === "daemon:list-providers") {
-    const providersModule = await import("./daemon/tunnel-providers/index.js");
-    const configDir = process.env.PERPLEXITY_CONFIG_DIR;
-    const statuses = await providersModule.listTunnelProviderStatuses(configDir);
-    const active = providersModule.readTunnelSettings(configDir).activeProvider;
-    const body = flags.json
-      ? JSON.stringify({ active, providers: statuses })
-      : statuses
-          .map((s) => `${s.isActive ? "*" : " "} ${s.id.padEnd(10)} ${s.displayName.padEnd(22)} ${s.setup.ready ? "ready" : s.setup.reason ?? "needs setup"}`)
-          .join("\n");
-    return { code: 0, stdout: body + "\n", stderr: "" };
-  }
-
-  if (command === "daemon:set-provider") {
-    const providerId = parsed.positional?.[0];
-    if (!providerId) {
-      return { code: 1, stdout: "", stderr: "set-provider requires a provider id (cf-quick | ngrok | cf-named).\n" };
-    }
-    try {
-      const providersModule = await import("./daemon/tunnel-providers/index.js");
-      const configDir = process.env.PERPLEXITY_CONFIG_DIR;
-      providersModule.writeTunnelSettings(configDir, { activeProvider: providerId });
-      return { code: 0, stdout: `Active tunnel provider set to ${providerId}.\n`, stderr: "" };
-    } catch (error) {
-      return { code: 1, stdout: "", stderr: (error instanceof Error ? error.message : String(error)) + "\n" };
-    }
-  }
-
-  if (command === "daemon:set-ngrok-authtoken") {
-    const authtoken = parsed.positional?.[0] ?? flags.token;
-    if (!authtoken || typeof authtoken !== "string" || authtoken.length < 10) {
-      return { code: 1, stdout: "", stderr: "set-ngrok-authtoken requires an authtoken (see dashboard.ngrok.com/get-started/your-authtoken).\n" };
-    }
-    try {
-      const providersModule = await import("./daemon/tunnel-providers/index.js");
-      providersModule.writeNgrokSettings(process.env.PERPLEXITY_CONFIG_DIR, { authtoken });
-      return { code: 0, stdout: "ngrok authtoken saved.\n", stderr: "" };
-    } catch (error) {
-      return { code: 1, stdout: "", stderr: (error instanceof Error ? error.message : String(error)) + "\n" };
-    }
-  }
-
-  if (command === "daemon:set-ngrok-domain") {
-    const domain = parsed.positional?.[0] ?? flags.domain ?? null;
-    try {
-      const providersModule = await import("./daemon/tunnel-providers/index.js");
-      providersModule.writeNgrokSettings(process.env.PERPLEXITY_CONFIG_DIR, { domain: domain ?? null });
-      return { code: 0, stdout: (domain ? `ngrok domain set to ${domain}.\n` : "ngrok domain cleared.\n"), stderr: "" };
-    } catch (error) {
-      return { code: 1, stdout: "", stderr: (error instanceof Error ? error.message : String(error)) + "\n" };
-    }
-  }
-
-  if (command === "daemon:clear-ngrok") {
-    try {
-      const providersModule = await import("./daemon/tunnel-providers/index.js");
-      providersModule.clearNgrokSettings(process.env.PERPLEXITY_CONFIG_DIR);
-      return { code: 0, stdout: "ngrok settings cleared.\n", stderr: "" };
-    } catch (error) {
-      return { code: 1, stdout: "", stderr: (error instanceof Error ? error.message : String(error)) + "\n" };
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // cf-named (Cloudflare Named Tunnel) CLI — mirrors the 8.4.3 dashboard
-  // widget for npm-only users. Helpers imported directly from the
-  // mcp-server; do NOT import the extension's runtime.ts (VS Code-private).
-  //
-  // Dashed subcommand names (daemon cf-named-login, etc.) so the existing
-  // parseArgs one-level-deep routing (daemon <x> → daemon:<x>) works
-  // unchanged. Documented identically in DAEMON_HELP_TEXT.
-  //
-  // Login, create, bind each modal-confirm via stderr/stdin unless --yes.
-  // Exit 130 on user decline (standard "interrupted by user" code).
-  // ─────────────────────────────────────────────────────────────────────
-
-  if (command === "daemon:cf-named-login") {
-    if (!flags.yes) {
-      const { promptYesNo } = await import("./tty-prompt.js");
-      const ok = await promptYesNo({
-        prompt: "This opens your default browser to authorize Cloudflare. Continue? [y/N] ",
-      });
-      if (!ok) {
-        return { code: 130, stdout: "", stderr: "Cancelled.\n" };
-      }
-    }
-    try {
-      const { runCloudflaredLogin } = await import("./daemon/tunnel-providers/index.js");
-      // forwardOutput: pipe cloudflared's child stderr AND stdout to OUR
-      // stderr so the CLI user sees the "open this URL in your browser"
-      // prompt. Never to our stdout — that's reserved for --json payload.
-      const result = await runCloudflaredLogin({
-        configDir: process.env.PERPLEXITY_CONFIG_DIR,
-        forwardOutput: true,
-      });
-      const body = flags.json
-        ? JSON.stringify({ ok: true, certPath: result.certPath })
-        : `cloudflared login completed. Cert at ${result.certPath}`;
-      return { code: 0, stdout: body + "\n", stderr: "" };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      const hint = /not installed/i.test(msg)
-        ? `${msg}\nRun 'npx perplexity-user-mcp daemon install-tunnel' to install cloudflared.\n`
-        : msg + "\n";
-      return { code: 1, stdout: "", stderr: hint };
-    }
-  }
-
-  if (command === "daemon:cf-named-list") {
-    try {
-      const { listNamedTunnels } = await import("./daemon/tunnel-providers/index.js");
-      const tunnels = await listNamedTunnels({ configDir: process.env.PERPLEXITY_CONFIG_DIR });
-      const body = flags.json
-        ? JSON.stringify({ tunnels })
-        : tunnels.length === 0
-          ? "No named tunnels."
-          : tunnels
-              .map((t) => `${t.uuid}  ${t.name}  (${t.connections ?? 0} connections)`)
-              .join("\n");
-      return { code: 0, stdout: body + "\n", stderr: "" };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      return { code: 1, stdout: "", stderr: msg + "\n" };
-    }
-  }
-
-  if (command === "daemon:cf-named-create") {
-    const name = flags.name ?? parsed.positional?.[0];
-    const hostname = flags.hostname ?? parsed.positional?.[1];
-    if (!name || typeof name !== "string") {
-      return { code: 1, stdout: "", stderr: "cf-named-create requires --name (or first positional argument).\n" };
-    }
-    if (!hostname || typeof hostname !== "string") {
-      return { code: 1, stdout: "", stderr: "cf-named-create requires --hostname (or second positional argument).\n" };
-    }
-    if (!flags.yes) {
-      const { promptYesNo } = await import("./tty-prompt.js");
-      const ok = await promptYesNo({
-        prompt: `This creates a Cloudflare tunnel "${name}" and routes DNS "${hostname}" under your zone. Continue? [y/N] `,
-      });
-      if (!ok) {
-        return { code: 130, stdout: "", stderr: "Cancelled.\n" };
-      }
-    }
-    try {
-      const { createNamedTunnel, writeTunnelConfig } = await import("./daemon/tunnel-providers/index.js");
-      const configDir = process.env.PERPLEXITY_CONFIG_DIR;
-      const created = await createNamedTunnel({ configDir, name, hostname });
-      // Placeholder port=1; the cf-named provider's start() rewrites it to the
-      // live daemon port on every spawn (port-drift rewrite), so this value is
-      // never read in practice. Matches the 8.4.3 dashboard behavior.
-      const config = writeTunnelConfig({
-        configDir,
-        uuid: created.uuid,
-        hostname,
-        port: 1,
-        credentialsPath: created.credentialsPath,
-      });
-      const body = flags.json
-        ? JSON.stringify({ ok: true, uuid: created.uuid, name: created.name, hostname, configPath: config.configPath, credentialsPath: created.credentialsPath })
-        : `Tunnel created: uuid=${created.uuid} hostname=${hostname}\nConfig written to ${config.configPath}`;
-      return { code: 0, stdout: body + "\n", stderr: "" };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      return { code: 1, stdout: "", stderr: msg + "\n" };
-    }
-  }
-
-  if (command === "daemon:cf-named-bind") {
-    const uuid = flags.uuid ?? parsed.positional?.[0];
-    const hostname = flags.hostname ?? parsed.positional?.[1];
-    if (!uuid || typeof uuid !== "string") {
-      return { code: 1, stdout: "", stderr: "cf-named-bind requires --uuid (or first positional argument).\n" };
-    }
-    if (!hostname || typeof hostname !== "string") {
-      return { code: 1, stdout: "", stderr: "cf-named-bind requires --hostname (or second positional argument).\n" };
-    }
-    const credentialsPath = join(homedir(), ".cloudflared", `${uuid}.json`);
-    if (!existsSync(credentialsPath)) {
-      return {
-        code: 1,
-        stdout: "",
-        stderr: `Credentials file not found at ${credentialsPath}. Run 'cloudflared tunnel create' for this UUID first, or use 'cf-named-create'.\n`,
-      };
-    }
-    if (!flags.yes) {
-      const { promptYesNo } = await import("./tty-prompt.js");
-      const ok = await promptYesNo({
-        prompt: `This writes a managed config binding tunnel ${uuid} to ${hostname}. Continue? [y/N] `,
-      });
-      if (!ok) {
-        return { code: 130, stdout: "", stderr: "Cancelled.\n" };
-      }
-    }
-    try {
-      const { writeTunnelConfig } = await import("./daemon/tunnel-providers/index.js");
-      const configDir = process.env.PERPLEXITY_CONFIG_DIR;
-      const config = writeTunnelConfig({
-        configDir,
-        uuid,
-        hostname,
-        port: 1,
-        credentialsPath,
-      });
-      const body = flags.json
-        ? JSON.stringify({ ok: true, uuid, hostname, configPath: config.configPath, credentialsPath })
-        : `Bound tunnel ${uuid} to ${hostname}.\nConfig written to ${config.configPath}`;
-      return { code: 0, stdout: body + "\n", stderr: "" };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      return { code: 1, stdout: "", stderr: msg + "\n" };
-    }
-  }
 
   if (command === "list-accounts") {
     const { listProfiles, getActiveName } = await import("./profiles.js");
@@ -809,8 +455,8 @@ export async function routeCommand(parsed) {
     // Pre-flight the unseal chain BEFORE touching the profile dir, so users
     // creating a new account on a fresh box get an actionable setup hint
     // instead of a "Vault decrypt failed" / "Vault locked" surprise on the
-    // first login. Bypass with --skip-vault-check (e.g. when the daemon
-    // owns the vault and the CLI is just used for account management).
+    // first login. Bypass with --skip-vault-check only when another process
+    // already owns vault setup and the CLI is just used for account management.
     if (!flags["skip-vault-check"]) {
       const unseal = await checkVaultUnseal();
       if (!unseal.ok) {
@@ -1156,83 +802,10 @@ function phaseFor(cmd) {
   return "?";
 }
 
-function parseOptionalPort(value) {
-  if (value === undefined || value === true) return null;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
-    return null;
-  }
-  return parsed;
-}
-
-function formatDaemonStatus(status) {
-  if (!status.running || !status.record) {
-    return "Daemon is not running.";
-  }
-
-  if (!status.healthy || !status.health) {
-    return `Daemon lock exists for pid=${status.record.pid}, but the health probe is not ready.`;
-  }
-
-  const tunnelUrl = status.health.tunnel?.url ?? status.record.tunnelUrl ?? null;
-  const parts = [
-    `Daemon running pid=${status.record.pid} port=${status.record.port}`,
-    `uptime=${formatDuration(status.health.uptimeMs)}`,
-  ];
-  if (tunnelUrl) {
-    parts.push(`tunnel=${tunnelUrl}`);
-  }
-  return parts.join(" ");
-}
-
-function serializeDaemonStatus(status) {
-  return {
-    running: status.running,
-    healthy: status.healthy,
-    stale: status.stale,
-    pid: status.record?.pid ?? null,
-    uuid: status.record?.uuid ?? null,
-    port: status.record?.port ?? null,
-    version: status.record?.version ?? null,
-    startedAt: status.record?.startedAt ?? null,
-    tunnelUrl: status.health?.tunnel?.url ?? status.record?.tunnelUrl ?? null,
-  };
-}
-
-function serializeDaemonConnection(daemon) {
-  return {
-    pid: daemon.pid,
-    uuid: daemon.uuid,
-    port: daemon.port,
-    url: daemon.url,
-    version: daemon.version,
-    startedAt: daemon.startedAt,
-    tunnelUrl: daemon.tunnelUrl ?? null,
-  };
-}
-
-function formatDuration(durationMs) {
-  if (!Number.isFinite(durationMs) || durationMs < 0) {
-    return "0s";
-  }
-  const seconds = Math.floor(durationMs / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  if (minutes < 60) return `${minutes}m${remainder}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h${minutes % 60}m`;
-}
-
 const HELP_TEXT = `perplexity-user-mcp
 
 Usage:
   npx perplexity-user-mcp                      Start MCP stdio server
-  npx perplexity-user-mcp daemon start [--port N] [--tunnel]
-  npx perplexity-user-mcp daemon stop
-  npx perplexity-user-mcp daemon status [--json]
-  npx perplexity-user-mcp daemon attach [--fallback-stdio] [--ensure-timeout-ms N]
-  npx perplexity-user-mcp daemon rotate-token
   npx perplexity-user-mcp login [--profile X] [--mode auto|manual] [--plain-cookies]
   npx perplexity-user-mcp logout [--profile X] [--purge]
   npx perplexity-user-mcp status [--profile X] [--all]
@@ -1262,48 +835,10 @@ Environment:
   PERPLEXITY_CONFIG_DIR         Override config dir (default: ~/.perplexity-mcp)
   PERPLEXITY_VAULT_PASSPHRASE   Env-var master-key fallback for headless Linux
   PERPLEXITY_MCP_STDIO=1        Forces stdio-server mode (no prompts)
-  PERPLEXITY_NO_DAEMON=1        'daemon attach' runs in-process stdio (bypass daemon)
-`;
-
-const DAEMON_HELP_TEXT = `perplexity-user-mcp daemon
-
-Usage:
-  npx perplexity-user-mcp daemon start [--port N] [--tunnel]
-  npx perplexity-user-mcp daemon stop
-  npx perplexity-user-mcp daemon status [--json]
-  npx perplexity-user-mcp daemon attach [--fallback-stdio] [--ensure-timeout-ms N]
-  npx perplexity-user-mcp daemon rotate-token
-  npx perplexity-user-mcp daemon install-tunnel
-  npx perplexity-user-mcp daemon enable-tunnel
-  npx perplexity-user-mcp daemon disable-tunnel
-  npx perplexity-user-mcp daemon list-providers [--json]
-  npx perplexity-user-mcp daemon set-provider <cf-quick | ngrok | cf-named>
-  npx perplexity-user-mcp daemon set-ngrok-authtoken <TOKEN>
-  npx perplexity-user-mcp daemon set-ngrok-domain [<DOMAIN>]
-  npx perplexity-user-mcp daemon clear-ngrok
-
-Cloudflare named-tunnel setup (persistent URL on your own zone):
-  npx perplexity-user-mcp daemon cf-named-login [--yes]
-      Run 'cloudflared tunnel login' (opens browser, writes ~/.cloudflared/cert.pem).
-  npx perplexity-user-mcp daemon cf-named-list [--json]
-      List tunnels visible to the origin cert.
-  npx perplexity-user-mcp daemon cf-named-create --name NAME --hostname HOST [--yes] [--json]
-      Create a new tunnel + DNS CNAME, then write the managed config.
-  npx perplexity-user-mcp daemon cf-named-bind --uuid UUID --hostname HOST [--yes] [--json]
-      Bind the managed config to an existing tunnel UUID (credentials must exist
-      at ~/.cloudflared/<uuid>.json). No browser, no DNS changes.
-
-Notes:
-  - --yes skips the y/N confirmation prompt for login / create / bind.
-  - cf-named-login / create / bind prompt on stderr and read stdin; exit 130 on decline.
-  - With --json, stdout is a single parseable JSON line (scriptable).
-
-Environment:
-  PERPLEXITY_NO_DAEMON=1        'daemon attach' runs in-process stdio (bypass daemon)
 `;
 
 /* v8 ignore start -- only runs when cli.js is executed as a script */
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isDirectRun(import.meta.url, process.argv[1])) {
   const parsed = parseArgs(process.argv.slice(2));
   routeCommand(parsed).then((res) => {
     if (res.stdout) process.stdout.write(res.stdout);

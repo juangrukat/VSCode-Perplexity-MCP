@@ -333,6 +333,7 @@ export function __resetKeyCache() {
 }
 
 async function tryKeytar() {
+  if (process.env.PERPLEXITY_DISABLE_KEYCHAIN === "1") return null;
   try {
     const mod = await import("keytar");
     return mod.default ?? mod;
@@ -410,10 +411,8 @@ export async function getUnsealMaterial() {
     "Vault locked: no keychain, no env var, no TTY. " +
     "Three unseal paths on Linux/headless: " +
     "(a) install an OS keychain (libsecret + gnome-keyring) so the MCP process can read it, " +
-    "(b) set PERPLEXITY_VAULT_PASSPHRASE in your IDE's MCP server env block, or " +
-    "(c) run the VS Code extension's daemon and connect over HTTP transport instead of stdio. " +
-    "Codex CLI setup: docs/codex-cli-setup.md. " +
-    "Generic vault-unseal docs: docs/vault-unseal.md."
+    "or (b) set PERPLEXITY_VAULT_PASSPHRASE in your MCP server env block. " +
+    "See docs/perplexity-config.md."
   );
 }
 

@@ -16,10 +16,10 @@ describe("reinit-watcher", () => {
 
   it("fires callback when .reinit appears", async () => {
     const cb = vi.fn();
-    watcher = watchReinit("default", cb);
+    watcher = watchReinit("default", cb, { debounceMs: 25 });
+    await new Promise((r) => setTimeout(r, 50));
     writeFileSync(getProfilePaths("default").reinit, "x");
-    await new Promise((r) => setTimeout(r, 300));
-    expect(cb).toHaveBeenCalled();
+    await vi.waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 1000 });
   });
 
   it("debounces rapid writes to a single invocation", async () => {

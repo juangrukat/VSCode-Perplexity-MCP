@@ -19,26 +19,27 @@ describe("doctor rollup", () => {
 });
 
 describe("runAll", () => {
-  it("returns a DoctorReport with 10 categories (probe skipped by default)", async () => {
+  const injected = {
+    runtime: [{ category: "runtime", name: "node-version", status: "pass", message: "v20" }],
+    config: [{ category: "config", name: "config-dir", status: "pass", message: "ok" }],
+    profiles: [{ category: "profiles", name: "profile-count", status: "pass", message: "0" }],
+    vault: [{ category: "vault", name: "unseal-path", status: "pass", message: "keychain" }],
+    browser: [{ category: "browser", name: "chrome-family", status: "pass", message: "/tmp/chrome" }],
+    "native-deps": [{ category: "native-deps", name: "patchright", status: "pass", message: "1.x" }],
+    network: [{ category: "network", name: "dns", status: "pass", message: "resolved" }],
+    mcp: [{ category: "mcp", name: "tool-config", status: "pass", message: "full" }],
+  };
+
+  it("returns a DoctorReport with 9 categories (probe skipped by default)", async () => {
     const report = await runAll({
       configDir: process.cwd(),
       probe: false,
-      injected: {
-        runtime: [{ category: "runtime", name: "node-version", status: "pass", message: "v20" }],
-        config: [{ category: "config", name: "config-dir", status: "pass", message: "ok" }],
-        profiles: [{ category: "profiles", name: "profile-count", status: "pass", message: "0" }],
-        vault: [{ category: "vault", name: "unseal-path", status: "pass", message: "keychain" }],
-        browser: [{ category: "browser", name: "chrome-family", status: "pass", message: "/tmp/chrome" }],
-        "native-deps": [{ category: "native-deps", name: "patchright", status: "pass", message: "1.x" }],
-        network: [{ category: "network", name: "dns", status: "pass", message: "resolved" }],
-        ide: [{ category: "ide", name: "ide-audit", status: "skip", message: "-" }],
-        mcp: [{ category: "mcp", name: "tool-config", status: "pass", message: "full" }],
-      },
+      injected,
     });
     expect(report.overall).toBe("pass");
     expect(Object.keys(report.byCategory)).toEqual([
       "runtime", "config", "profiles", "vault", "browser",
-      "native-deps", "network", "ide", "mcp", "probe",
+      "native-deps", "network", "mcp", "probe",
     ]);
     expect(report.probeRan).toBe(false);
     expect(report.byCategory.probe.checks[0].status).toBe("skip");
@@ -49,6 +50,7 @@ describe("runAll", () => {
       configDir: process.cwd(),
       probe: true,
       injected: {
+        ...injected,
         probe: [{ category: "probe", name: "probe-search", status: "pass", message: "2 sources" }],
       },
     });

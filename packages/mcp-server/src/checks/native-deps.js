@@ -9,8 +9,8 @@ const CATEGORY = "native-deps";
  * Build a `require` that resolves as if invoked from `baseDir`. Falls back
  * to this module's own file when no baseDir is supplied. The fallback works
  * in plain Node ESM (CLI mode). In tsup-bundled CJS, `import.meta.url` is
- * polyfilled to undefined, so the extension MUST pass a baseDir derived
- * from `vscode.ExtensionContext.extensionUri` (e.g. `<extensionUri>/dist`).
+ * polyfilled to undefined in some bundled contexts, so callers can pass a
+ * baseDir when they need a different resolver root.
  */
 function makeRequire(baseDir) {
   if (baseDir) {
@@ -58,7 +58,7 @@ export async function run(opts = {}) {
       name: "patchright",
       status: "fail",
       message: "patchright not resolvable",
-      hint: "Run `pnpm install` or reinstall the VSIX.",
+      hint: "Run `npm install`.",
     });
   }
 
@@ -80,7 +80,7 @@ export async function run(opts = {}) {
       status: "warn",
       message: "got-scraping packaging chain is broken — runtime will fall back to browser tier",
       detail: { chainError: err.message },
-      hint: "Add the missing package to rootPackages in packages/extension/scripts/prepare-package-deps.mjs and rebuild the VSIX.",
+      hint: "Run `npm install` so got-scraping and its runtime dependency chain are present.",
     });
   }
 
@@ -120,7 +120,7 @@ export async function run(opts = {}) {
       name: "impit",
       status: "skip",
       message: "not installed (optional — skips browser launches for sync, hydrate, retrieve, export, models, login)",
-      hint: "Install with: `npx perplexity-user-mcp install-speed-boost` — or click 'Install Speed Boost' in the VS Code extension dashboard.",
+      hint: "Install with: `npx perplexity-user-mcp install-speed-boost`.",
       action: { label: "Install Speed Boost", commandId: "Perplexity.installSpeedBoost" },
     });
   }

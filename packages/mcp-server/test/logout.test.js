@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { softLogout, hardLogout } from "../src/logout.js";
-import { Vault } from "../src/vault.js";
+import { Vault, __resetKeyCache } from "../src/vault.js";
 import { createProfile, getProfilePaths, getProfile } from "../src/profiles.js";
 
 describe("logout", () => {
@@ -12,7 +12,15 @@ describe("logout", () => {
     configDir = mkdtempSync(join(tmpdir(), "px-logout-"));
     process.env.PERPLEXITY_CONFIG_DIR = configDir;
     process.env.PERPLEXITY_VAULT_PASSPHRASE = "t-pass";
+    __resetKeyCache();
+    vi.doMock("keytar", () => { throw new Error("unavailable"); });
     createProfile("default");
+  });
+  afterEach(() => {
+    vi.doUnmock("keytar");
+    delete process.env.PERPLEXITY_CONFIG_DIR;
+    delete process.env.PERPLEXITY_VAULT_PASSPHRASE;
+    __resetKeyCache();
   });
 
   it("soft: clears vault cookies + meta.lastLogin, touches .reinit, keeps dir", async () => {

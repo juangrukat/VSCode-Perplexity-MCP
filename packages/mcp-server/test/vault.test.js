@@ -52,9 +52,17 @@ describe("vault AES-GCM primitives", () => {
 });
 
 describe("getMasterKey — keychain path", () => {
+  let previousDisableKeychain;
   beforeEach(() => {
+    previousDisableKeychain = process.env.PERPLEXITY_DISABLE_KEYCHAIN;
+    delete process.env.PERPLEXITY_DISABLE_KEYCHAIN;
     __resetKeyCache();
     delete process.env.PERPLEXITY_VAULT_PASSPHRASE;
+  });
+  afterEach(() => {
+    if (previousDisableKeychain === undefined) delete process.env.PERPLEXITY_DISABLE_KEYCHAIN;
+    else process.env.PERPLEXITY_DISABLE_KEYCHAIN = previousDisableKeychain;
+    __resetKeyCache();
   });
 
   it("reads existing key from keychain via keytar", async () => {
@@ -150,11 +158,14 @@ describe("Vault interface", () => {
     process.env.PERPLEXITY_CONFIG_DIR = TMP;
     process.env.PERPLEXITY_VAULT_PASSPHRASE = "test-passphrase-xyz";
     __resetKeyCache();
+    vi.doMock("keytar", () => { throw new Error("unavailable"); });
   });
   afterEach(() => {
     rm2(TMP, { recursive: true, force: true });
+    vi.doUnmock("keytar");
     delete process.env.PERPLEXITY_CONFIG_DIR;
     delete process.env.PERPLEXITY_VAULT_PASSPHRASE;
+    __resetKeyCache();
   });
 
   it("set+get roundtrip", async () => {
@@ -798,6 +809,8 @@ describe("v2 migration", () => {
 
   it("(10) keychain path still works and ignores the salt", async () => {
     // Reset to use a keychain key (32 bytes, hex).
+    const previousDisableKeychain = process.env.PERPLEXITY_DISABLE_KEYCHAIN;
+    delete process.env.PERPLEXITY_DISABLE_KEYCHAIN;
     vi.doUnmock("keytar");
     delete process.env.PERPLEXITY_VAULT_PASSPHRASE;
     __resetKeyCache();
@@ -833,6 +846,9 @@ describe("v2 migration", () => {
       expect(key.toString("hex")).toBe(fixedKey);
     } finally {
       vi.doUnmock("keytar");
+      if (previousDisableKeychain === undefined) delete process.env.PERPLEXITY_DISABLE_KEYCHAIN;
+      else process.env.PERPLEXITY_DISABLE_KEYCHAIN = previousDisableKeychain;
+      __resetKeyCache();
     }
   });
 
@@ -1214,6 +1230,8 @@ describe("v3 migration", () => {
 
   it("(v3.7) keychain path bypasses scrypt — v3 blob round-trips without invoking KDF", async () => {
     // Switch to keychain mode for this test.
+    const previousDisableKeychain = process.env.PERPLEXITY_DISABLE_KEYCHAIN;
+    delete process.env.PERPLEXITY_DISABLE_KEYCHAIN;
     vi.doUnmock("keytar");
     delete process.env.PERPLEXITY_VAULT_PASSPHRASE;
     __resetKeyCache();
@@ -1256,6 +1274,9 @@ describe("v3 migration", () => {
       expect(key.toString("hex")).toBe(fixedKey);
     } finally {
       vi.doUnmock("keytar");
+      if (previousDisableKeychain === undefined) delete process.env.PERPLEXITY_DISABLE_KEYCHAIN;
+      else process.env.PERPLEXITY_DISABLE_KEYCHAIN = previousDisableKeychain;
+      __resetKeyCache();
     }
   });
 

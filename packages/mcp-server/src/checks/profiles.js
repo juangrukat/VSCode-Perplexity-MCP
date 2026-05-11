@@ -85,7 +85,7 @@ export async function run(opts = {}) {
           name: `${name}/models-cache`,
           status: "warn",
           message: `models cache is ${Math.round(ageDays)} days old`,
-          hint: "Open the dashboard and click 'Fetch live' to refresh.",
+          hint: "Run `npx perplexity-user-mcp status --profile " + name + "` or log in again to refresh.",
         });
       } else {
         results.push({ category: CATEGORY, name: `${name}/models-cache`, status: "pass", message: `${Math.round(ageDays)}d old` });

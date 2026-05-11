@@ -1,8 +1,4 @@
-// Speed Boost (impit) install / uninstall helpers shared by the CLI and
-// the VS Code extension. Mirrors the behavior of
-// packages/extension/src/native-deps.ts but lives in the npm package so
-// `npx perplexity-user-mcp install-speed-boost` doesn't require the
-// extension to be installed.
+// Speed Boost (impit) install / uninstall helpers used by the CLI.
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";

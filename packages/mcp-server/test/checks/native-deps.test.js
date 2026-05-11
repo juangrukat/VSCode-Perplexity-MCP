@@ -15,7 +15,7 @@ describe("checks/native-deps", () => {
     const chain = checks.find((c) => c.name === "got-scraping-chain");
     expect(chain.status).toBe("warn");
     expect(chain.detail?.chainError).toMatch(/is-obj/);
-    expect(chain.hint).toMatch(/prepare-package-deps/);
+    expect(chain.hint).toMatch(/npm install/);
   });
 
   it("reports impit install state", async () => {

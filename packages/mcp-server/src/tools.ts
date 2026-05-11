@@ -18,11 +18,12 @@ import {
 } from "./history-store.js";
 
 type GetClient = () => Promise<PerplexityClient>;
+type StoredTier = "Max" | "Pro" | "Enterprise" | "Authenticated" | "Anonymous";
 
 export interface ToolAuditEvent {
   tool: string;
   clientId: string;
-  source: "loopback" | "tunnel";
+  source: "stdio";
   durationMs: number;
   ok: boolean;
   error?: string;
@@ -31,7 +32,7 @@ export interface ToolAuditEvent {
 export interface ToolProgressEvent {
   tool: string;
   clientId: string;
-  source: "loopback" | "tunnel";
+  source: "stdio";
   progress: Record<string, unknown>;
 }
 
@@ -646,10 +647,10 @@ export function registerTools(
                 update(savedId, buildStoredHistoryEntry({
                   tool: existing.tool,
                   query: existing.query,
-                  model: existing.model,
-                  mode: existing.mode,
-                  language: existing.language,
-                  tier: existing.tier,
+                  model: existing.model ?? null,
+                  mode: existing.mode ?? null,
+                  language: existing.language ?? null,
+                  tier: isStoredTier(existing.tier) ? existing.tier : undefined,
                   createdAt: existing.createdAt,
                   status: isStillRunning ? "pending" : "completed",
                   completedAt: isStillRunning ? existing.completedAt : new Date().toISOString(),
@@ -679,10 +680,10 @@ export function registerTools(
               update(savedId, buildStoredHistoryEntry({
                 tool: existing.tool,
                 query: existing.query,
-                model: existing.model,
-                mode: existing.mode,
-                language: existing.language,
-                tier: existing.tier,
+                model: existing.model ?? null,
+                mode: existing.mode ?? null,
+                language: existing.language ?? null,
+                tier: isStoredTier(existing.tier) ? existing.tier : undefined,
                 createdAt: existing.createdAt,
                 status: isStillRunning ? "pending" : "completed",
                 completedAt: isStillRunning ? existing.completedAt : new Date().toISOString(),
@@ -761,7 +762,7 @@ export function registerTools(
       "perplexity_sync_cloud",
       {
         title: "Perplexity Sync Cloud",
-        description: "Sync Perplexity cloud history into the local history store using the daemon singleton client.",
+        description: "Sync Perplexity cloud history into the local history store using the active MCP client.",
         inputSchema: {
           page_size: z.number().int().positive().optional().describe("Optional page size for cloud thread pagination."),
         },
@@ -796,7 +797,7 @@ export function registerTools(
       "perplexity_hydrate_cloud_entry",
       {
         title: "Perplexity Hydrate Cloud Entry",
-        description: "Hydrate a single cloud-backed history entry using the daemon singleton client.",
+        description: "Hydrate a single cloud-backed history entry using the active MCP client.",
         inputSchema: {
           history_id: z.string().describe("Cloud-backed history entry id to hydrate."),
         },
@@ -908,7 +909,7 @@ export function registerTools(
       "perplexity_login",
       {
         title: "Perplexity Login",
-        description: "Returns instructions for completing Perplexity login. Login is interactive (email + OTP) and must be initiated from the IDE extension dashboard or the CLI — an MCP tool call cannot prompt for the OTP.",
+        description: "Returns instructions for completing Perplexity login. Login is interactive (email + OTP) and must be initiated from the CLI; an MCP tool call cannot prompt for the OTP.",
       },
       async () => {
         // Login is interactive and an MCP tool call has no surface to prompt
@@ -917,12 +918,12 @@ export function registerTools(
         // previously surfaced as a misleading "unexpected nil response"
         // transport error in MCP clients.
         const message = [
-          "**Perplexity login is interactive — run it from the dashboard or CLI:**",
+          "**Perplexity login is interactive — run it from the CLI:**",
           "",
-          "1. **IDE / Extension:** open the Perplexity dashboard and click *Login*. Enter your email; the OTP prompt appears in the dashboard.",
-          "2. **CLI:** `npx perplexity-user-mcp login --mode auto --email YOUR_EMAIL@example.com` — the OTP is read from your terminal.",
+          "1. `npx perplexity-user-mcp login --mode manual` opens Google Chrome for sign-in.",
+          "2. `npx perplexity-user-mcp login --mode auto --email YOUR_EMAIL@example.com` reads the OTP from your terminal when supported.",
           "",
-          "Both paths share the same vault, so once you're logged in via either, all MCP tools (search, reason, research, sync, hydrate, etc.) work immediately. Speed Boost (impit) is used automatically when installed.",
+          "Once login completes, the encrypted vault is shared by Claude Code and Codex CLI MCP launches. Speed Boost (impit) is used automatically when installed.",
         ].join("\n");
         return {
           content: [{ type: "text" as const, text: message }],
@@ -958,11 +959,19 @@ export function registerTools(
 function getClientId(extra: any): string {
   return typeof extra?.authInfo?.clientId === "string" && extra.authInfo.clientId.length > 0
     ? extra.authInfo.clientId
-    : "daemon-client";
+    : "mcp-client";
 }
 
-function getRequestSource(extra: any): "loopback" | "tunnel" {
-  return extra?.authInfo?.extra?.source === "tunnel" ? "tunnel" : "loopback";
+function getRequestSource(_extra: any): "stdio" {
+  return "stdio";
+}
+
+function isStoredTier(value: unknown): value is StoredTier {
+  return value === "Max"
+    || value === "Pro"
+    || value === "Enterprise"
+    || value === "Authenticated"
+    || value === "Anonymous";
 }
 
 function extractToolError(result: any): string {

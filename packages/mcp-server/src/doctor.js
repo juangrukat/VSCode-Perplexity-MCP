@@ -2,7 +2,7 @@ import { getConfigDir } from "./profiles.js";
 
 export const CATEGORIES = [
   "runtime", "config", "profiles", "vault", "browser",
-  "native-deps", "network", "ide", "mcp", "probe",
+  "native-deps", "network", "mcp", "probe",
 ];
 
 const RANK = { skip: 0, pass: 1, warn: 2, fail: 3 };

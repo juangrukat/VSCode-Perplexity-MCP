@@ -102,10 +102,8 @@ const USER_AGENT =
 /**
  * Build launch options for Playwright persistent context.
  *
- * Uses the first available system browser (Chrome > Edge > Chromium > Brave)
- * for best Cloudflare fingerprinting, falling back to patchright's bundled
- * Chromium. The resolved `channel` is passed through so Patchright can apply
- * channel-specific stealth tweaks (important for msedge on Windows).
+ * Uses Google Chrome for the browser session. The resolved `channel` is passed
+ * through so Patchright can apply Chrome-specific behavior.
  */
 function buildLaunchOptions(headless: boolean): Record<string, any> {
   const browser = findBrowser();
@@ -119,12 +117,7 @@ function buildLaunchOptions(headless: boolean): Record<string, any> {
   };
   if (browser) {
     opts.executablePath = browser.path;
-    // Only pass channel when it's a first-party Playwright channel. Brave
-    // uses channel "chromium" with an explicit executablePath — Patchright
-    // treats it as generic Chromium which is the correct behavior.
-    if (browser.channel === "chrome" || browser.channel === "msedge" || browser.channel === "chromium") {
-      opts.channel = browser.channel;
-    }
+    opts.channel = browser.channel;
     console.error(`[perplexity-mcp] Using ${browser.channel}: ${browser.path}`);
   }
   return opts;

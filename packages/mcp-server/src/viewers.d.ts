@@ -1,4 +1,4 @@
-import type { ExternalViewer } from "@perplexity-user-mcp/shared";
+import type { ExternalViewer } from "./types.js";
 
 export declare function listViewers(overrides?: ExternalViewer[]): ExternalViewer[];
 export declare function loadViewerConfig(): ExternalViewer[];
